@@ -1,8 +1,0 @@
-README.md
-pyproject.toml
-src/volsurface/__init__.py
-src/volsurface.egg-info/PKG-INFO
-src/volsurface.egg-info/SOURCES.txt
-src/volsurface.egg-info/dependency_links.txt
-src/volsurface.egg-info/top_level.txt
-tests/test_import.py
