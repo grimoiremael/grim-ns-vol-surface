@@ -1,0 +1,373 @@
+\documentclass[11pt]{article}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{array}
+\usepackage{tabularx}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+\title{\textbf{Grim--NS Volatility Surface Model}\\
+\large Preliminary Specification and Ideation Surface}
+\author{Grimoire--Mael\\
+Special thanks: Nervous Structure}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Purpose}
+
+The purpose of the Grim--NS Volatility Surface Model is to design and engineer a worthy complementary volatility-surface program to pay-walled models; one that fetches, normalizes, computes over, and renders authoritative options-chain data for the operator's convenience.
+
+The program must be engineered in such a way that it is remotely accessible, or otherwise locally attachable, and purposefully designed for eventual integration with the Nervous Structure Master System. Preferably, the model must at the very least be operable, though not necessarily editable, from a phone device. This entails a Backend--Frontend arrangement in which the Backend relays computations and admissible outputs to the Workbench.
+
+The long-term goal is to end up with a model that qualifies as a research instrument rather than merely a decorative market-data renderer.
+
+A strategic overlay is genuinely useful. The model should ultimately be able to overlay actual options structures onto the volatility surface, showing where a put debit spread, calendar, diagonal, broken wing, double diagonal, or similar structure sits relative to the surface. This would allow the operator to inspect where the trade is buying volatility, where it is selling volatility, and whether the structure is positioned across skew, term, or convexity in a sensible manner.
+
+\section{Initial Expectations}
+
+Producing a basic, non-professional model as the initial baseline skeleton is deemed highly doable. The skeletal model would lack the sophistication required to render institutional-grade results while still serving as a viable initial model for further development. The intended audience is not a passive retail dashboard user, but an advanced options-chain reader attempting to reason more cleanly over volatility, skew, term structure, and strategy placement.
+
+The performance of the basic model is expected to be lackluster when judged against mature professional systems. It should therefore be treated as a prototype and not as an immediate decision engine. The first objective is not to produce an immaculate surface. The first objective is to produce an inspectable computational pathway from raw chain data to admissible volatility observations.
+
+The expected difficulty of the primary sub-tasks is as follows:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Sub-task} & \textbf{Expected difficulty} \\
+\midrule
+Data/API attachment & Moderate \\
+Black--Scholes--Merton IV inversion & Easy to moderate \\
+Cleaning option-chain data & Moderate to hard \\
+Rendering the surface & Easy \\
+Interpolating and smoothing sanely & Moderate \\
+Making it robust enough to trust with money & Hard \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The central difficulty is not the formulaic mathematics. The central difficulty is quote hygiene, source reliability, and preventing the surface from becoming a visually impressive rendering of corrupted or structurally dubious data.
+
+\section{System Boundary}
+
+The model should be designed around a clean separation between data ingestion, normalization, admissibility, calculation, estimation, rendering, and strategic overlay.
+
+The preferred abstract pipeline is:
+
+\[
+\begin{aligned}
+\text{RawChain} &\rightarrow \text{NormalizedChain} \rightarrow \text{AdmissibleQuoteSet} \\
+&\rightarrow \text{IVPointSet} \rightarrow \text{SurfaceEstimate} \\
+&\rightarrow \text{RenderLayer} \rightarrow \text{StrategyOverlay}.
+\end{aligned}
+\]
+
+
+This separation is important. Bad data removal must not be treated as a minor implementation detail. It is one of the epistemic cores of the model. The surface should not silently absorb every quote. The system should decide which quotes are admissible, which are rejected, and why.
+
+\section{Baseline Model Design}
+
+\subsection{Step 1: Fetch Spot and Option Chain Data}
+
+The first step is to fetch the spot price of the underlying asset and retrieve the options-chain data.
+
+The raw option-chain record should, at minimum, include:
+
+\begin{itemize}[leftmargin=1.5em]
+    \item Strike.
+    \item Expiry.
+    \item Bid.
+    \item Ask.
+    \item Last.
+    \item Volume.
+    \item Open interest.
+    \item Option type.
+    \item Quote timestamp.
+\end{itemize}
+
+For each contract we proceed to compute the midpoint:
+
+\[
+M = \frac{\text{Bid}+\text{Ask}}{2}.
+\]
+
+This midpoint is not to be treated as an infallible truth. It is merely a provisional estimate of the tradable option price. Wide markets, stale timestamps, and illiquid wings must be treated as warnings that the midpoint may be a poor representative price.
+
+The initial exclusion layer should discard, or at minimum flag, contracts with:
+
+\begin{itemize}[leftmargin=1.5em]
+    \item Zero bid and zero ask.
+    \item Absurdly wide spreads.
+    \item Stale timestamps.
+    \item Missing expiries.
+    \item No observable liquidity.
+    \item Prices violating elementary option bounds.
+\end{itemize}
+
+\subsection{Step 2: Compute Time to Expiry}
+
+The basic model computes time to expiry by:
+
+\[
+T = \frac{\text{DTE}}{365}.
+\]
+
+For short-dated options and intraday use, this should later be refined into an actual timestamp difference divided by annualized seconds:
+
+\[
+T =
+\frac{
+t_{\text{expiry}} - t_{\text{quote}}
+}{
+\text{seconds per year}
+}.
+\]
+
+The crude DTE/365 model is acceptable for a toy implementation. It becomes increasingly hazardous for very short-dated options, where a few hours of time decay can matter.
+
+\subsection{Step 3: Estimate the Forward Price}
+
+The model then derives the estimated forward price using:
+
+\[
+F = S e^{(r-q)T},
+\]
+
+where:
+
+\begin{itemize}[leftmargin=1.5em]
+    \item $S$ is spot price.
+    \item $r$ is the relevant risk-free rate.
+    \item $q$ is the dividend yield, borrow adjustment, or dividend proxy.
+    \item $T$ is time to expiry.
+\end{itemize}
+
+For the earliest prototype, $r$ and $q$ may be supplied manually as constants. For the research-instrument version, they should become explicit sourced inputs with metadata. For indices and ETFs, dividends matter. For very short-dated structures, the error may be small. For LEAPs, the error can become serious as time advances.
+
+\subsection{Step 4: Invert the Black--Scholes--Merton Formula}
+
+The first implementation may defer Black--76 and begin with Black--Scholes--Merton.
+
+For calls, the model solves:
+
+\[
+C_{\text{market}} = C_{\text{BSM}}(S,K,T,r,q,\sigma).
+\]
+
+For puts, it solves:
+
+\[
+P_{\text{market}} = P_{\text{BSM}}(S,K,T,r,q,\sigma).
+\]
+
+The object being solved for is $\sigma$, the implied volatility.
+
+The preferred root-finder is Brent's method, rather than a naive Newton-only procedure. The reason is practical: Vega can become tiny deep ITM, deep OTM, or close to expiry. A bracketing method with robust convergence behavior is preferable to an elegant solver that fails precisely where the option chain is most fragile.
+
+The implied-volatility inversion may be written abstractly as:
+
+\[
+IV =
+f^{-1}(\text{Price}, S, K, T, r, q).
+\]
+
+The resulting point is:
+
+\[
+(\log(K/F), T, \sigma).
+\]
+
+The justification for using $\log(K/F)$ is that moneyness is usually a cleaner x-axis than raw strike. Raw strike is not invariant across underlying price regimes, whereas forward-relative moneyness gives a more stable representation of the smile.
+
+\section{Quote Admissibility and IV Cloud Cleaning}
+
+After computing the IV point cloud, the model must clean the cloud. This is an epistemically pernicious task.
+
+Bad quotes generate insane IVs. Illiquid wings can print grotesque values. A wide bid/ask spread means the true implied volatility is better understood as a range rather than a point.
+
+The initial filter should pay heed to:
+
+\begin{itemize}[leftmargin=1.5em]
+    \item Spread width, for example rejecting or flagging contracts where ask minus bid is too large relative to midpoint.
+    \item Minimum midpoint, because tiny option prices are unstable under inversion.
+    \item Reasonable IV bounds, for example rejecting IV below $1\%$ or above an extreme cap.
+    \item Monotonic sanity checks, especially around option price versus strike.
+    \item Put-call parity consistency where both calls and puts exist.
+\end{itemize}
+
+Ideally, the model should compute:
+
+\[
+IV_{\text{bid}}, \quad IV_{\text{mid}}, \quad IV_{\text{ask}},
+\]
+
+yielding an uncertainty band rather than a false point estimate.
+
+\subsection{Admissibility Reason Codes}
+
+Each rejected or downgraded quote should carry a reason code. This makes the surface auditable.
+
+A preliminary reason-code set may include:
+
+\begin{itemize}[leftmargin=1.5em]
+    \item \texttt{ZERO\_MARKET}: bid and ask are both zero.
+    \item \texttt{WIDE\_SPREAD}: spread is too wide relative to midpoint.
+    \item \texttt{STALE\_QUOTE}: quote timestamp is too old.
+    \item \texttt{LOW\_MID}: midpoint is too close to zero for stable inversion.
+    \item \texttt{BOUND\_VIOLATION}: price violates elementary option bounds.
+    \item \texttt{PARITY\_VIOLATION}: put-call parity deviation is too large.
+    \item \texttt{IV\_OUT\_OF\_RANGE}: computed IV falls outside reasonable limits.
+    \item \texttt{LOW\_LIQUIDITY}: volume and/or open interest is insufficient.
+\end{itemize}
+
+The model should distinguish between exclusion and warning. Some quotes should be removed entirely. Others should remain visible, but marked as low-confidence.
+
+\section{Rendering and Interpolation}
+
+The basic surface can be represented using:
+
+\[
+x = \log(K/F),
+\]
+
+\[
+y = T,
+\]
+
+\[
+z = IV.
+\]
+
+It is likely wise to temporarily defer the 3D rendered result. The engineering path should proceed as follows:
+
+\begin{enumerate}[leftmargin=1.5em]
+    \item IV skew across delta or moneyness.
+    \item Term structure at ATM IV.
+    \item IV and moneyness heatmap.
+    \item 3D surface only once the data looks sane.
+\end{enumerate}
+
+The 3D surface is attractive, but diagnostically inferior to clean two-dimensional slices during early development. The operator should first be able to inspect individual smiles, term-structure curves, and quote-quality flags before trusting any interpolated surface.
+
+\section{Strategy Overlay}
+
+The strategic overlay is a later but highly important feature.
+
+The model should eventually allow the operator to place a structure onto the surface and inspect:
+
+\begin{itemize}[leftmargin=1.5em]
+    \item Which leg is buying volatility.
+    \item Which leg is selling volatility.
+    \item Whether the long leg is paying excess wing premium.
+    \item Whether the short leg is rich or cheap.
+    \item Whether the trade harvests term structure, skew, or both.
+    \item Whether the structure is exposed to interpolation uncertainty.
+\end{itemize}
+
+This is likely where the model becomes genuinely useful. A volatility surface by itself is informative. A volatility surface with the actual trade structure overlaid becomes a research instrument.
+
+\section{Model Tiering List}
+
+The model should be developed in explicit tiers.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\textwidth}{@{}p{0.21\textwidth}Yp{0.19\textwidth}@{}}
+\toprule
+\textbf{Tier} & \textbf{Description} & \textbf{Expected time} \\
+\midrule
+Toy Model &
+Manual CSV chain $\rightarrow$ IV calculation $\rightarrow$ plotted smiles &
+1--2 days \\
+
+Fragile MVP &
+API chain $\rightarrow$ basic cleaning $\rightarrow$ IV $\rightarrow$ 2D render &
+Several days to 1 week \\
+
+Clean MVP &
+API ingestion, normalization, bid/mid/ask IV, admissibility flags &
+1--2 weeks \\
+
+Research Instrument &
+Robust filters, term structure, smoothing, strategy overlay &
+3--6 weeks \\
+
+Trading-grade Candidate &
+Stale quote control, parity checks, no-arbitrage smoothing, alerts, storage &
+$>$2 months \\
+
+Institutional-grade &
+Corporate actions, dividends, rates, calibration, historical backtesting &
+Continuous development \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+The earlier estimate of producing an MVP in one to two days is plausible only for a fragile prototype with cooperative data, minimal error handling, and no serious admissibility logic. A clean MVP should be granted more time, because API handling, schema normalization, quote timestamps, and rejection logic usually consume more engineering attention than the IV inversion itself.
+
+\section{Version Gates}
+
+\subsection{V0: Local Toy Engine}
+
+The V0 model should accept manual CSV input, compute Black--Scholes--Merton IV, and render expiry-by-expiry smiles. It need not attach to live APIs or produce a true surface.
+
+\subsection{V1: MVP Research Surface}
+
+The V1 model should include API ingestion, normalized option-chain schema, bid/mid/ask IV, admissibility flags, two-dimensional smiles, ATM term structure, and a heatmap.
+
+\subsection{V2: Research Instrument}
+
+The V2 model should introduce persistent storage, historical surfaces, skew metrics, term-structure metrics, strategy overlays, uncertainty bands, and operator diagnostics.
+
+\subsection{V3: Trading-grade Candidate}
+
+The V3 model should add stale-quote controls, no-arbitrage checks, smoothing or calibration, alerting, surface-difference tracking, and robust failure reporting.
+
+\section{Deferred Work}
+
+Several components should be explicitly deferred until the baseline model behaves sanely:
+
+\begin{itemize}[leftmargin=1.5em]
+    \item Black--76 implementation.
+    \item SVI or SABR-style calibration.
+    \item No-arbitrage surface smoothing.
+    \item Full corporate-action handling.
+    \item Historical backtesting.
+    \item Broker-integrated execution.
+    \item Automated trading decisions.
+\end{itemize}
+
+This deferral is intentional. The model should first become an inspectable research surface. Only after the pipeline is coherent should it attempt to become a trading-grade decision engine.
+
+\section{Closing Note}
+
+The Grim--NS Volatility Surface Model should not be judged by whether the earliest surface looks impressive. It should be judged by whether each rendered point can be traced backward to an admissible quote, a defined calculation, a source timestamp, and a known confidence state.
+
+A beautiful surface without quote discipline is merely decorated noise. A less beautiful surface with explicit admissibility, uncertainty bands, and strategic overlays is already useful.
+
+\end{document}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
