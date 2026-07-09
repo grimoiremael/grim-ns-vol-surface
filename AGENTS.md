@@ -114,3 +114,12 @@ When finishing a task, report:
 5. Any blockers, uncertainties, or follow-up recommendations.
 
 Do not claim success unless tests ran or there is a clear reason they could not run.
+
+## Spreadsheet and mobile workflow
+
+- Treat CSV/XLSX as first-class Toy Model interface formats.
+- Do not move pricing, cleaning, IV inversion, or admissibility logic into spreadsheets.
+- Keep spreadsheet handling in data-source or workbench modules.
+- Prefer generated XLSX and static HTML outputs for operator review.
+- Keep static HTML outputs mobile-readable where practical.
+- Do not implement Bloomberg ingestion until the local CSV/XLSX engine passes tests.

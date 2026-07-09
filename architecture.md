@@ -77,6 +77,19 @@ Python Core Engine
         -> Static HTML/mobile report
         -> Future web dashboard
 ```
+## Toy Model V1.0 Interface Target
+
+The Toy Model must support spreadsheet-compatible workflows early.
+
+For V1.0, the model should support:
+- CSV fixture ingestion;
+- XLSX fixture ingestion, if dependency cost remains acceptable;
+- normalized quote objects independent of input format;
+- smile-level output;
+- XLSX report export;
+- static HTML report export suitable for mobile viewing.
+
+Excel/XLSX is treated as an input/output and operator-review surface. It is not the computation engine. Pricing, admissibility, implied-volatility inversion, and surface logic remain in Python.
 
 ## 4. Data-source adapter philosophy
 
